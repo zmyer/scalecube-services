@@ -49,7 +49,6 @@ class ServiceMessageCodecTest extends BaseTest {
 
     assertAll(
         () -> assertEquals(message.qualifier(), actual.qualifier()),
-        () -> assertEquals(message.streamId(), actual.streamId()),
         () -> assertEquals(message.headers(), actual.headers()),
         () -> assertEquals(message.dataFormat(), actual.dataFormat()),
         () -> assertEquals(message.data(), actual.data()));
@@ -78,7 +77,8 @@ class ServiceMessageCodecTest extends BaseTest {
     result.requestTimestamp = LocalDateTime.now();
     result.sourceIpAddress = "255.255.255.255";
     result.token =
-        "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJUZW5hbnQxIiwic3ViIjoiMSIsIm5hbWUiOiJ0cmFkZXIxIn0.j9dCs63J4xtWfhctrXb5popLAl8ohSlMTJU3_vCrQHk";
+        "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJUZW5hbnQxIiwic3ViIjoiMSIsIm5hbWUiOiJ0cmFkZXIxIn0."
+            + "j9dCs63J4xtWfhctrXb5popLAl8ohSlMTJU3_vCrQHk";
     return result;
   }
 

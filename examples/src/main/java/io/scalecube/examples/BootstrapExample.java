@@ -18,6 +18,7 @@ public class BootstrapExample {
 
   /**
    * Main method.
+   *
    * @param args - arguments.
    * @throws Exception - exception.
    */
@@ -43,7 +44,7 @@ public class BootstrapExample {
     System.out.println("Start HelloWorldService with BusinessLogicFacade");
     final Microservices node1 =
         Microservices.builder()
-            .seeds(gateway.discovery().address())
+            .discovery(options -> options.seeds(gateway.discovery().address()))
             .services(
                 call ->
                     Collections.singletonList(
@@ -56,14 +57,14 @@ public class BootstrapExample {
     System.out.println("Start ServiceHello");
     final Microservices node2 =
         Microservices.builder()
-            .seeds(gateway.discovery().address())
+            .discovery(options -> options.seeds(gateway.discovery().address()))
             .services(new ServiceHelloImpl())
             .startAwait();
 
     System.out.println("Start ServiceWorld");
     final Microservices node3 =
         Microservices.builder()
-            .seeds(gateway.discovery().address())
+            .discovery(options -> options.seeds(gateway.discovery().address()))
             .services(new ServiceWorldImpl())
             .startAwait();
 

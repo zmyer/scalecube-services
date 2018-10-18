@@ -20,11 +20,14 @@ import io.scalecube.services.api.ServiceMessage;
 import io.scalecube.services.exceptions.ServiceException;
 import io.scalecube.services.sut.GreetingResponse;
 import io.scalecube.services.sut.GreetingServiceImpl;
+import io.scalecube.services.sut.QuoteService;
+import io.scalecube.services.sut.SimpleQuoteService;
 import java.time.Duration;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.reactivestreams.Publisher;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -36,29 +39,33 @@ public class ServiceCallRemoteTest extends BaseTest {
   private static Microservices gateway;
   private static Microservices provider;
 
+  /** Setup. */
   @BeforeAll
   public static void setup() {
     gateway = gateway();
-    provider = serviceProvider();
+    provider = serviceProvider(new GreetingServiceImpl());
   }
 
+  /** Cleanup. */
   @AfterAll
   public static void tearDown() {
     try {
       gateway.shutdown().block();
-    } catch (Exception ex) {
+    } catch (Exception ignore) {
+      // no-op
     }
 
     try {
       provider.shutdown().block();
-    } catch (Exception ex) {
+    } catch (Exception ignore) {
+      // no-op
     }
   }
 
-  private static Microservices serviceProvider() {
+  private static Microservices serviceProvider(Object service) {
     return Microservices.builder()
-        .seeds(gateway.discovery().address())
-        .services(new GreetingServiceImpl())
+        .discovery(options -> options.seeds(gateway.discovery().address()))
+        .services(service)
         .startAwait();
   }
 
@@ -109,10 +116,10 @@ public class ServiceCallRemoteTest extends BaseTest {
             ServiceException.class,
             () ->
                 Mono.from(
-                    gateway
-                        .call()
-                        .create()
-                        .requestOne(GREETING_FAIL_REQ, GreetingResponse.class))
+                        gateway
+                            .call()
+                            .create()
+                            .requestOne(GREETING_FAIL_REQ, GreetingResponse.class))
                     .block(timeout));
     assertEquals("GreetingRequest{name='joe'}", exception.getMessage());
   }
@@ -126,10 +133,10 @@ public class ServiceCallRemoteTest extends BaseTest {
             ServiceException.class,
             () ->
                 Mono.from(
-                    gateway
-                        .call()
-                        .create()
-                        .requestOne(GREETING_ERROR_REQ, GreetingResponse.class))
+                        gateway
+                            .call()
+                            .create()
+                            .requestOne(GREETING_ERROR_REQ, GreetingResponse.class))
                     .block(timeout));
     assertEquals("GreetingRequest{name='joe'}", exception.getMessage());
   }
@@ -199,6 +206,32 @@ public class ServiceCallRemoteTest extends BaseTest {
     GreetingResponse greetings = Mono.from(result).block(Duration.ofSeconds(TIMEOUT)).data();
     System.out.println("greeting_request_completes_before_timeout : " + greetings.getResult());
     assertTrue(greetings.getResult().equals(" hello to: joe"));
+  }
+
+  @Test
+  public void test_service_address_lookup_occur_only_after_subscription() {
+
+    Flux<ServiceMessage> quotes =
+        gateway
+            .call()
+            .create()
+            .requestMany(
+                ServiceMessage.builder()
+                    .qualifier(QuoteService.NAME, "onlyOneAndThenNever")
+                    .data(null)
+                    .build());
+
+    // Add service to cluster AFTER creating a call object.
+    // (prove address lookup occur only after subscription)
+    Microservices quotesService = serviceProvider(new SimpleQuoteService());
+
+    StepVerifier.create(quotes.take(1)).expectNextCount(1).expectComplete().verify(timeout);
+
+    try {
+      quotesService.shutdown();
+    } catch (Exception ignored) {
+      // no-op
+    }
   }
 
   private static Microservices gateway() {

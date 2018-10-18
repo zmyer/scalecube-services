@@ -10,8 +10,7 @@ import reactor.core.publisher.Mono;
 
 public final class GreetingServiceImpl implements GreetingService {
 
-  @Inject
-  Microservices ms;
+  @Inject Microservices ms;
 
   private int instanceId;
 
@@ -57,7 +56,8 @@ public final class GreetingServiceImpl implements GreetingService {
   @Override
   public Mono<String> greetingNoParams() {
     print(
-        "[greetingNoParams] Hello... i am a service an just recived a call bu i dont know from who.");
+        "[greetingNoParams] Hello... i am a service an just recived "
+            + "a call bu i dont know from who.");
     return Mono.just("hello unknown");
   }
 

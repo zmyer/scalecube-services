@@ -1,7 +1,7 @@
-package io.scalecube.services.benchmarks.services;
+package io.scalecube.services.benchmarks.service;
 
-import io.scalecube.benchmarks.BenchmarksSettings;
-import io.scalecube.benchmarks.BenchmarksState;
+import io.scalecube.benchmarks.BenchmarkSettings;
+import io.scalecube.benchmarks.BenchmarkState;
 import io.scalecube.services.Microservices;
 import io.scalecube.services.ServiceCall;
 import java.time.Duration;
@@ -9,9 +9,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
-public class ServicesBenchmarksState extends BenchmarksState<ServicesBenchmarksState> {
+public class BenchmarkServiceState extends BenchmarkState<BenchmarkServiceState> {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(ServicesBenchmarksState.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(BenchmarkServiceState.class);
 
   private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(6);
 
@@ -20,19 +20,19 @@ public class ServicesBenchmarksState extends BenchmarksState<ServicesBenchmarksS
   private Microservices seed;
   private Microservices node;
 
-  public ServicesBenchmarksState(BenchmarksSettings settings, Object... services) {
+  public BenchmarkServiceState(BenchmarkSettings settings, Object... services) {
     super(settings);
     this.services = services;
   }
 
   @Override
   public void beforeAll() {
-    seed = Microservices.builder().metrics(settings.registry()).startAwait();
+    seed = Microservices.builder().metrics(registry()).startAwait();
 
     node =
         Microservices.builder()
-            .metrics(settings.registry())
-            .seeds(seed.discovery().address())
+            .metrics(registry())
+            .discovery(options -> options.seeds(seed.discovery().address()))
             .services(services)
             .startAwait();
 
@@ -40,9 +40,7 @@ public class ServicesBenchmarksState extends BenchmarksState<ServicesBenchmarksS
         "Seed address: "
             + seed.discovery().address()
             + ", services address: "
-            + node.serviceAddress()
-            + ", seed serviceRegistry: "
-            + seed.serviceRegistry().listServiceReferences());
+            + node.serviceAddress());
   }
 
   @Override

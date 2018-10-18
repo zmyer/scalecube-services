@@ -3,12 +3,12 @@ package io.scalecube.services;
 import static java.util.Objects.requireNonNull;
 
 import io.scalecube.services.api.ServiceMessage;
+import io.scalecube.services.codec.ReferenceCountUtil;
 import io.scalecube.services.codec.ServiceMessageCodec;
 import io.scalecube.services.exceptions.ExceptionProcessor;
 import io.scalecube.services.exceptions.ServiceUnavailableException;
 import io.scalecube.services.methods.MethodInfo;
 import io.scalecube.services.methods.ServiceMethodRegistry;
-import io.scalecube.services.metrics.Metrics;
 import io.scalecube.services.registry.api.ServiceRegistry;
 import io.scalecube.services.routing.RoundRobinServiceRouter;
 import io.scalecube.services.routing.Router;
@@ -19,6 +19,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.function.Function;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
@@ -34,14 +35,12 @@ public class ServiceCall {
   private final ServiceMethodRegistry methodRegistry;
   private final ServiceRegistry serviceRegistry;
   private final Router router;
-  private final Metrics metrics;
 
   private ServiceCall(Call call) {
     this.transport = call.transport;
     this.methodRegistry = call.methodRegistry;
     this.serviceRegistry = call.serviceRegistry;
     this.router = call.router;
-    this.metrics = call.metrics;
   }
 
   /**
@@ -51,7 +50,6 @@ public class ServiceCall {
   public static class Call {
 
     private Router router = Routers.getRouter(RoundRobinServiceRouter.class);
-    private Metrics metrics;
 
     private final ClientTransport transport;
     private final ServiceMethodRegistry methodRegistry;
@@ -83,11 +81,6 @@ public class ServiceCall {
 
     public Call router(Router router) {
       this.router = router;
-      return this;
-    }
-
-    public Call metrics(Metrics metrics) {
-      this.metrics = metrics;
       return this;
     }
 
@@ -141,8 +134,9 @@ public class ServiceCall {
           .getInvoker(request.qualifier())
           .invokeOne(request, ServiceMessageCodec::decodeData)
           .onErrorMap(ExceptionProcessor::mapException);
-    } else { // remote service.
-      return addressLookup(request).flatMap(address -> requestOne(request, responseType, address));
+    } else {
+      return addressLookup(request)
+          .flatMap(address -> requestOne(request, responseType, address)); // remote service
     }
   }
 
@@ -187,9 +181,9 @@ public class ServiceCall {
           .getInvoker(request.qualifier())
           .invokeMany(request, ServiceMessageCodec::decodeData)
           .onErrorMap(ExceptionProcessor::mapException);
-    } else { // remote service.
+    } else {
       return addressLookup(request)
-          .flatMapMany(address -> requestMany(request, responseType, address));
+          .flatMapMany(address -> requestMany(request, responseType, address)); // remote service
     }
   }
 
@@ -242,7 +236,8 @@ public class ServiceCall {
                     .getInvoker(qualifier)
                     .invokeBidirectional(messages, ServiceMessageCodec::decodeData)
                     .onErrorMap(ExceptionProcessor::mapException);
-              } else { // remote service.
+              } else {
+                // remote service
                 return addressLookup(request)
                     .flatMapMany(address -> requestBidirectional(messages, responseType, address));
               }
@@ -296,8 +291,6 @@ public class ServiceCall {
                 return check.get(); // toString, hashCode was invoked.
               }
 
-              Metrics.mark(serviceInterface, metrics, method, "request");
-
               switch (methodInfo.communicationMode()) {
                 case FIRE_AND_FORGET:
                   return serviceCall.oneWay(toServiceMessage(methodInfo, params));
@@ -330,10 +323,18 @@ public class ServiceCall {
   }
 
   private Mono<Address> addressLookup(ServiceMessage request) {
-    return router
-        .route(serviceRegistry, request)
-        .map(serviceReference -> Mono.just(serviceReference.address()))
-        .orElseGet(() -> Mono.error(noReachableMemberException(request)));
+    Callable<Address> callable =
+        () ->
+            router
+                .route(serviceRegistry, request)
+                .map(ServiceReference::address)
+                .orElseThrow(() -> noReachableMemberException(request));
+    return Mono.fromCallable(callable)
+        .doOnError(
+            t -> {
+              Optional<Object> dataOptional = Optional.ofNullable(request.data());
+              dataOptional.ifPresent(ReferenceCountUtil::safestRelease);
+            });
   }
 
   private static ServiceMessage toServiceMessage(MethodInfo methodInfo, Object... params) {

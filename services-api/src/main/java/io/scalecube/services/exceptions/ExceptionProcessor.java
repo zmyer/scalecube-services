@@ -10,7 +10,7 @@ public class ExceptionProcessor {
   private static final int DEFAULT_ERROR_CODE = 500;
 
   public static boolean isError(ServiceMessage message) {
-    return message.qualifier().contains(Qualifier.ERROR_NAMESPACE);
+    return message.qualifier() != null && message.qualifier().contains(Qualifier.ERROR_NAMESPACE);
   }
 
   /**
@@ -64,7 +64,7 @@ public class ExceptionProcessor {
         return new ServiceUnavailableException(errorCode, errorMessage);
       case InternalServiceException.ERROR_TYPE:
         return new InternalServiceException(errorCode, errorMessage);
-      // Handle other types of Service Exceptions here
+        // Handle other types of Service Exceptions here
       default:
         return new InternalServiceException(errorCode, errorMessage);
     }

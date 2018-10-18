@@ -1,6 +1,5 @@
 package io.scalecube.services.transport.rsocket;
 
-import io.netty.channel.EventLoopGroup;
 import io.rsocket.RSocket;
 import io.rsocket.RSocketFactory;
 import io.rsocket.transport.netty.client.TcpClientTransport;
@@ -14,8 +13,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
-import reactor.ipc.netty.tcp.TcpClient;
+import reactor.netty.resources.LoopResources;
+import reactor.netty.tcp.TcpClient;
 
+/** RSocket client transport implementation. */
 public class RSocketClientTransport implements ClientTransport {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(RSocketClientTransport.class);
@@ -24,11 +25,17 @@ public class RSocketClientTransport implements ClientTransport {
       ThreadLocal.withInitial(ConcurrentHashMap::new);
 
   private final ServiceMessageCodec codec;
-  private final EventLoopGroup eventLoopGroup;
+  private final LoopResources loopResources;
 
-  public RSocketClientTransport(ServiceMessageCodec codec, EventLoopGroup eventLoopGroup) {
+  /**
+   * Constructor for this transport.
+   *
+   * @param codec message codec
+   * @param loopResources client loop resources
+   */
+  public RSocketClientTransport(ServiceMessageCodec codec, LoopResources loopResources) {
     this.codec = codec;
-    this.eventLoopGroup = eventLoopGroup;
+    this.loopResources = loopResources;
   }
 
   @Override
@@ -41,15 +48,10 @@ public class RSocketClientTransport implements ClientTransport {
 
   private Mono<RSocket> connect(Address address, Map<Address, Mono<RSocket>> monoMap) {
     TcpClient tcpClient =
-        TcpClient.create(
-            options ->
-                options
-                    .disablePool()
-                    .eventLoopGroup(eventLoopGroup)
-                    .host(address.host())
-                    .port(address.port()));
-
-    TcpClientTransport tcpClientTransport = TcpClientTransport.create(tcpClient);
+        TcpClient.newConnection() // create non-pooled
+            .runOn(loopResources)
+            .host(address.host())
+            .port(address.port());
 
     Mono<RSocket> rsocketMono =
         RSocketFactory.connect()
@@ -57,7 +59,7 @@ public class RSocketClientTransport implements ClientTransport {
                 frame ->
                     ByteBufPayload.create(
                         frame.sliceData().retain(), frame.sliceMetadata().retain()))
-            .transport(tcpClientTransport)
+            .transport(() -> TcpClientTransport.create(tcpClient))
             .start();
 
     return rsocketMono
