@@ -33,7 +33,7 @@ public class MicroservicesTest {
   /** Setup. */
   @BeforeEach
   public void setUp() {
-    Mockito.when(serviceTransport.getWorkerThreadPool(anyInt(), any())).thenReturn(workerExecutor);
+    Mockito.when(serviceTransport.getWorkerThreadPool(anyInt())).thenReturn(workerExecutor);
     Mockito.when(serviceTransport.getClientTransport(any())).thenReturn(clientTransport);
     Mockito.when(serviceTransport.getServerTransport(any())).thenReturn(serverTransport);
   }
@@ -42,10 +42,13 @@ public class MicroservicesTest {
   public void testServiceTransportNotStarting() {
     String expectedErrorMessage = "expected error message";
 
-    Mockito.when(serverTransport.bind(any(), any()))
+    Mockito.when(serverTransport.bind(anyInt(), any()))
         .thenReturn(Mono.error(new RuntimeException(expectedErrorMessage)));
 
-    StepVerifier.create(Microservices.builder().transport(serviceTransport).start())
+    StepVerifier.create(
+            Microservices.builder()
+                .transport(options -> options.transport(serviceTransport))
+                .start())
         .expectErrorMessage(expectedErrorMessage)
         .verify();
   }
@@ -55,11 +58,14 @@ public class MicroservicesTest {
     String expectedErrorMessage = "expected error message";
     Mockito.when(serviceDiscovery.start(any()))
         .thenThrow(new RuntimeException(expectedErrorMessage));
-    Mockito.when(serverTransport.bind(any(), any()))
+    Mockito.when(serverTransport.bind(anyInt(), any()))
         .thenReturn(Mono.just(new InetSocketAddress(0)));
 
     StepVerifier.create(
-            Microservices.builder().discovery(serviceDiscovery).transport(serviceTransport).start())
+            Microservices.builder()
+                .discovery(serviceDiscovery)
+                .transport(options -> options.transport(serviceTransport))
+                .start())
         .expectErrorMessage(expectedErrorMessage)
         .verify();
 

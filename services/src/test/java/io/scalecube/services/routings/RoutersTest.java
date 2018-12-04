@@ -55,7 +55,7 @@ public class RoutersTest extends BaseTest {
                     .tag("SENDER", "1")
                     .build(),
                 ServiceInfo.fromServiceInstance(new GreetingServiceImplA())
-                    .tag("Weight", "0.3")
+                    .tag("Weight", "0.1")
                     .build())
             .startAwait();
 
@@ -69,7 +69,7 @@ public class RoutersTest extends BaseTest {
                     .tag("SENDER", "2")
                     .build(),
                 ServiceInfo.fromServiceInstance(new GreetingServiceImplB())
-                    .tag("Weight", "0.7")
+                    .tag("Weight", "0.9")
                     .build())
             .startAwait();
   }
@@ -124,7 +124,7 @@ public class RoutersTest extends BaseTest {
 
     AtomicInteger serviceBCount = new AtomicInteger(0);
 
-    int n = (int) 1e2;
+    int n = (int) 1e3;
 
     Flux.range(0, n)
         .flatMap(i -> service.greeting(new GreetingRequest("joe")))
@@ -132,9 +132,11 @@ public class RoutersTest extends BaseTest {
         .doOnNext(response -> serviceBCount.incrementAndGet())
         .blockLast(Duration.ofSeconds(3));
 
-    System.out.println("Service B was called: " + serviceBCount.get() + " times.");
+    System.out.println("Service B was called: " + serviceBCount.get() + " times out of " + n);
 
-    assertEquals(0.6d, serviceBCount.doubleValue() / n, 0.25d);
+    assertTrue(
+        (serviceBCount.doubleValue() / n) > 0.5,
+        "Service B's Weight=0.9; more than half of invocations have to be routed to Service B");
   }
 
   @Test
@@ -204,7 +206,7 @@ public class RoutersTest extends BaseTest {
 
     AtomicInteger serviceBCount = new AtomicInteger(0);
 
-    int n = (int) 1e2;
+    int n = (int) 1e3;
     for (int i = 0; i < n; i++) {
       ServiceMessage message = service.requestOne(req, GreetingResponse.class).block(timeout);
       if (message.data().toString().contains("SERVICE_B_TALKING")) {
@@ -212,8 +214,11 @@ public class RoutersTest extends BaseTest {
       }
     }
 
-    System.out.println("Service B was called: " + serviceBCount.get() + " times.");
+    System.out.println("Service B was called: " + serviceBCount.get() + " times out of " + n);
 
-    assertEquals(0.6d, serviceBCount.doubleValue() / n, 0.25d);
+    assertTrue(
+        (serviceBCount.doubleValue() / n) > 0.5,
+        "Service B's Weight=0.9; at least more than half "
+        + "of invocations have to be routed to Service B");
   }
 }
